@@ -1,0 +1,186 @@
+clc
+clear all
+close all
+format long
+
+np = 2; ord = 2; l=2; % l is the # of cluster nodes
+coeff_max_error = 1e-12;
+nt = 500; % # of test
+hs = 0.02:0.00005:0.1; % size of cluster
+min_moments = 2*(np*ord+1)+1;
+Ns = min_moments:1:20; % # of samples
+ord_v = ord*ones(1,np);
+SRF =[];
+error_jumps = [];
+error_coeffs = [];
+
+    for i = 1:nt
+%         randomIndex = randi(length(hs), 1);
+        h = hs(i);
+%         randomIndex = randi(length(Ns), 1);
+%         N = Ns(randomIndex);
+        N = min_moments;
+        delta = h/(l-1);
+        x2 = clustered_config(l,l,h);
+        U2l = create_cv(-1*x2)';
+        b = zeros([2*l 1]);
+        b(2*l) = factorial(2*l-1);
+%         y = vpa(inv(sym(U2l)))*b;
+        y = U2l\b;
+        u = zeros([2*np 1]);
+        tilde_u = zeros([2*np 1]);
+        for j = 1:2:(2*l-1)
+            tilde_u(j) = ((delta)^(2*l-1))*y(j);
+            tilde_u(j+1) = ((delta)^(2*l-1))*(2*pi*1i)*exp(-2*pi*1i*x2(int32((j+1)/2)))*y(j+1);
+            u(j) = ((delta)^(2*l-1))*y(j);
+            u(j+1) = ((delta)^(2*l-1))*y(j+1);
+        end
+%         u = u/norm(u);
+%         tilde_u = tilde_u/norm(tilde_u);
+        true_jumps = clustered_config(l,np,h)';
+%         true_coeffs = ones(np,ord);
+%         cv = reshape(true_coeffs',numel(true_coeffs),1);
+%         cv(1)=5*1i;
+%         cv(2)=100;
+%         cv(3)=0.01; 
+%         for n=5:1:8
+%             cv(n) = 1e-10;
+%         end
+         cv = tilde_u;
+%         for n=5:1:8
+%             cv(n) = 1e-10;
+%         end
+        n_coeffs = length(cv);
+        V = cvand(exp(-2*pi*1i*true_jumps),ord_v,N);
+        exact_moments = V*cv;
+        % Add noise
+        perturbed_moments = exact_moments+coeff_max_error*rand(size(exact_moments));
+        %reconstruct the jumps & coeffs
+        [reconstructed_jumps, reconstructed_coeffs] = solve_confluent_prony_esprit(np,ord,perturbed_moments);
+        reconstructed_jumps = (angle(reconstructed_jumps))./(-2*pi);
+        
+        for k=1:1:np
+            if(reconstructed_jumps(k) < 0)
+                reconstructed_jumps(k) = reconstructed_jumps(k) + 1;
+            end
+            if(reconstructed_jumps(k) > 0.99)
+                reconstructed_jumps(k) = reconstructed_jumps(k) - 1;
+            end
+        end
+        [r_j, I] = sort(reconstructed_jumps);
+        r_c = zeros([2*l,1]);
+        r_ca = zeros([l,1]);
+        r_cb = zeros([l,1]);
+        ca = zeros([l,1]);
+        cb = zeros([l,1]);
+        for t=1:1:length(I)
+            o = 2*I(t)-1;
+            r_c(2*t-1) = reconstructed_coeffs(o);
+            r_ca(t) = r_c(2*t-1);
+            ca(t) = cv(2*t-1);
+            r_c(2*t) = reconstructed_coeffs(o+1);
+            r_cb(t) = r_c(2*t);
+            cb(t) = cv(2*t);
+        end
+        % calculate errors
+        error_jumps(i) = norm(true_jumps-r_j);
+        error_coeffs_b(i) = norm(cb-r_cb); 
+        error_coeffs_a(i) = norm(ca-r_ca); 
+        error_coeffs(i) = norm(cv-r_c); 
+        SRFs(i) = (N*(h/(np-1)))^(-1);
+    end
+    %Plot figure
+    p0 = polyfit(log10(SRFs),log10(error_jumps),1);
+    y0 = polyval(p0,log10(SRFs));
+    p1 = polyfit(log10(SRFs),log10(error_coeffs),1);
+    y1 = polyval(p1,log10(SRFs));
+    pa = polyfit(log10(SRFs),log10(error_coeffs_a),1);
+    ya = polyval(pa,log10(SRFs));
+    pb = polyfit(log10(SRFs),log10(error_coeffs_b),1);
+    yb = polyval(pb,log10(SRFs));
+    figure
+%     abb=scatter(log10(SRFs),log10(error_jumps),15,'MarkerEdgeColor',[0 .5 .5],'MarkerFaceColor',[0 .7 .7],'LineWidth',0.2);
+%     hold on
+%     abb=scatter(log10(SRFs),log10(error_coeffs_a),45,'filled','d','MarkerFaceColor',[0.929 0.694 0.125],'MarkerEdgeColor',[1 0.794 0.125]);
+%     hold on
+%     abb=scatter(log10(SRFs),log10(error_coeffs_b),'filled','p','MarkerEdgeColor',[0.301 0.744 .933]);
+%     hold on
+%     abb=scatter(log10(SRFs),log10(error_coeffs),35,'filled','.','MarkerEdgeColor',[0.85 0.325 0.098]);
+%     hold on
+%     ab=plot(log10(SRFs),log10(((SRFs).^((4*l)-1))*coeff_max_error),'LineWidth',1.5,'Color',[.496 .184 .556]);
+%     hold on
+%     ab=plot(log(SRFs),y1,'LineWidth',2);
+%     hold on
+%     ab=plot(log(SRFs),y,'LineWidth',2);
+    abb=scatter(SRFs,error_jumps,15,'MarkerEdgeColor',[0 .5 .5],'MarkerFaceColor',[0 .7 .7],'LineWidth',0.2);
+    hold on
+    abb=scatter(SRFs,error_coeffs_a,45,'filled','d','MarkerFaceColor',[0.929 0.694 0.125],'MarkerEdgeColor',[1 0.794 0.125]);
+    hold on
+    abb=scatter(SRFs,error_coeffs_b,'filled','p','MarkerEdgeColor',[0.301 0.744 .933]);
+    hold on
+    abb=scatter(SRFs,error_coeffs,35,'filled','.','MarkerEdgeColor',[0.85 0.325 0.098]);
+    hold on
+    ab=plot(SRFs,((SRFs).^((4*l)-1))*coeff_max_error,'LineWidth',1.5,'Color',[.496 .184 .556]);
+    grid on
+    set(gca,'xscale','log','yscale','log')
+    titleInfo = sprintf('Single Cluster s = %d, l = %d', np, l);
+    legend('$\mathcal{E}_{\xi}$','$\mathcal{E}_{a}$','$\mathcal{E}_{b}$','$\mathcal{E}$','$SRF^{4{\ell}-1}\epsilon$','Interpreter','latex');
+    title('Single Cluster $s = 2$, $\ell = 2$, $\epsilon=1\mathrm{e}{-12}$','Interpreter','latex')
+    xlabel('$SRF$','Interpreter','latex')
+    txt1 = ['$y_{\mathcal{E}_{\xi}} = $', num2str(p0(1)), '$*x + $', num2str(p0(2))];
+    txt2 = ['$y_{\mathcal{E}_{a}} = $',num2str(pa(1)),'$*x + $',num2str(pa(2))];
+    txt3 = ['$y_{\mathcal{E}_{b}} = $',num2str(pb(1)),'$*x + $',num2str(pb(2))];
+    txt4 = ['$y_{\mathcal{E}} = $',num2str(p1(1)),'$*x + $',num2str(p1(2))];
+%     text(1.2,-10,txt1,'Interpreter','latex');
+%     text(1.2,-11,txt2,'Interpreter','latex');
+%     text(1.2,-12,txt3,'Interpreter','latex');
+%     text(1.2,-13,txt4,'Interpreter','latex');
+%     text(0.53,4,txt1,'Interpreter','latex');
+%     text(0.53,3,txt2,'Interpreter','latex');
+%     text(0.53,2,txt3,'Interpreter','latex');
+%     text(0.53,1,txt4,'Interpreter','latex');
+    %for s=3
+%     text(3.2,10^4,txt1,'Interpreter','latex');
+%     text(3.2,10^3,txt2,'Interpreter','latex');
+%     text(3.2,10^2,txt3,'Interpreter','latex');
+%     text(3.2,10^1,txt4,'Interpreter','latex');
+    %for s=2
+    text(2.2,10^-4,txt1,'Interpreter','latex');
+    text(2.2,10^-4.5,txt2,'Interpreter','latex');
+    text(2.2,10^-5,txt3,'Interpreter','latex');
+    text(2.2,10^-5.5,txt4,'Interpreter','latex');
+    
+    disp("error jumps: " + error_jumps(end));
+    disp("reconstructed jumps: " + sort(reconstructed_jumps));
+    disp("true jumps: " + true_jumps)
+    
+
+% create a single clustered configuration (normally distributed)
+function x = clustered_config(p,d,h)
+x = [];
+th = h/(p-1); %tau*h
+    for j=1:1:p
+        x(j) = (j-1)*th;
+    end
+    for j=(p+1):1:d
+        x(j) = (p-1)*th + ((j-p)*((1 - (p-1)*th))/(d-p+1));
+    end
+end
+
+
+function CV = create_cv(clfun) %not on unit circle
+    d = length(clfun);
+    CV = zeros(2*d);
+    for i = 1:2:2*d-1
+        for j = 1:1:2*d
+            CV(i,j) = clfun(int32((i+1)/2))^(j-1);
+        end
+    end
+    for i = 2:2:2*d
+        for j = 2:1:2*d
+            CV(i,j) = (j-1)*(clfun(int32(i/2))^(j-2));
+        end
+    end
+end
+
+
