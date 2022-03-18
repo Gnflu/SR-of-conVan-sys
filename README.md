@@ -1,2 +1,4 @@
-# sv-conVan
-scaling of singular value of confluent vandermonde matrix with nodes on the unit circle
+# SR-of-conVan-sys
+This repository is the official implementation of "Super-resolution of generalized spikes and spectra of confluent
+Vandermonde matrices".
+
